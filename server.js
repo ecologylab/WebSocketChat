@@ -11,6 +11,13 @@ var io = require('socket.io')(server);
 // Serve static files on the root path.
 app.use('/', express.static('static'));
 
+// Utility function for computing a digest.
+var crypto = require('crypto');
+function digest(input) {
+  var d = crypto.createHash('md5').update(input).digest('base64').substr(0, 12);
+  return d.replace(/\+/g, '-').replace(/\//g, '_');
+}
+
 // Tells socket.io to listen to a built-in event 'connection'. This event is
 // triggered when a client connects to the server. At that time, the callback
 // function (the 2nd argument) will be called with an object (named as 'conn')
@@ -30,9 +37,13 @@ io.sockets.on('connection', function(conn) {
       conn.user_id = msg.user_id;
       conn.emit('login_ok');
       // Broadcast that someone entered the room.
-      io.emit('notification', msg.user_id + ' entered the room.');
-      // Send a welcome message.
-      conn.emit('notification', "welcome to the chat room, " + conn.user_id + "!");
+      var notif = {
+        ts: Date.now(),
+        receiver: "*",
+        content: conn.user_id + " entered the room.",
+      };
+      notif.id = digest(notif.receiver + notif.ts + notif.content);
+      io.emit('notification', notif);
     } else {
       // When something is wrong, send a login_fail message to the client.
       conn.emit('login_fail');
@@ -42,16 +53,25 @@ io.sockets.on('connection', function(conn) {
   conn.on('chat', function(msg) {
     if (msg && msg.content) {
       // Broadcast this message to everyone in the room.
-      io.emit('chat', {
+      var chat = {
+        ts: Date.now(),
         sender: conn.user_id,
         content: msg.content,
-      });
+      };
+      chat.id = digest(chat.sender + chat.ts + chat.content);
+      io.emit('chat', chat);
     }
     // If the message seems invalid, it'll be ignored.
   });
 
   conn.on('disconnect', function() {
-    io.emit('notification', conn.user_id + ' left the room.');
+    var notif = {
+      ts: Date.now(),
+      receiver: "*",
+      content: conn.user_id + " left the room.",
+    };
+    notif.id = digest(notif.receiver + notif.ts + notif.content);
+    io.emit('notification', notif);
   });
 });
 

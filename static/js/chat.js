@@ -1,18 +1,18 @@
 // Chat using socket.io.
 
-function createMessageDiv(sender, content) {
+function createMessageDiv(msg) {
   // A <div> for displaying the content.
   var msgDiv = $('<div/>').addClass('msg_box');
-  msgDiv.append($('<span/>').addClass('sender').text(sender));
+  msgDiv.append($('<span/>').addClass('sender').text(msg.sender));
   msgDiv.append($('<span/>').addClass('said').text(' said: '));
-  msgDiv.append($('<span/>').addClass('msg_content').text(content));
+  msgDiv.append($('<span/>').addClass('msg_content').text(msg.content));
 
   return msgDiv;
 }
 
-function createNotificationDiv(content) {
+function createNotificationDiv(notif) {
   var notificationDiv = $('<div/>').addClass('msg_box');
-  notificationDiv.append($('<span/>').addClass('notification').text(content));
+  notificationDiv.append($('<span/>').addClass('notification').text(notif.content));
   return notificationDiv;
 }
 
@@ -24,8 +24,10 @@ function startChat(userId) {
 
   // If a chat message is received, display it.
   socket.on('chat', function(msg) {
-    if (msg && msg.sender && msg.sender != "" && msg.content && msg.content != "") {
-      var msgDiv = createMessageDiv(msg.sender, msg.content);
+    if (msg
+        && msg.sender && msg.sender != ""
+        && msg.content && msg.content != "") {
+      var msgDiv = createMessageDiv(msg);
       $('#msg_list').append(msgDiv);
     } else {
       console.error("Malformed msg: " + msg);
@@ -33,9 +35,9 @@ function startChat(userId) {
   });
 
   // If a notification is received, display it.
-  socket.on('notification', function(content) {
-    if (content && content != "") {
-      var notificationDiv = createNotificationDiv(content);
+  socket.on('notification', function(notif) {
+    if (notif && notif.content && notif.content != "") {
+      var notificationDiv = createNotificationDiv(notif);
       $('#msg_list').append(notificationDiv);
     }
     // If the notification content is empty, it is ignored.
