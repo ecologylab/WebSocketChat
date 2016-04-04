@@ -1,99 +1,63 @@
 // This node.js program implements a simple chat room service.
 
-// The node.js HTTP server.
-var app = require('http').createServer(handler);
+// Create a web server using Express.
+var express = require('express');
+var app = express();
+var server = require('http').createServer(app);
 
-// The socket.io WebSocket server, running with the node.js server.
-var io = require('socket.io').listen(app);
+// Add WebSocket support to the web server, using socket.io.
+var io = require('socket.io')(server);
 
-// Allows access to local file system.
-var fs = require('fs')
+// Serve static files on the root path.
+app.use('/', express.static('static'));
+
+// Tells socket.io to listen to a built-in event 'connection'. This event is
+// triggered when a client connects to the server. At that time, the callback
+// function (the 2nd argument) will be called with an object (named as 'conn')
+// representing the connection.
+io.sockets.on('connection', function(conn) {
+  // JavaScript functions are 'closures', which means they keep references to
+  // local variables in the scope they were created.
+  //
+  // That means, for each connected client, the JavaScript engine will create
+  // the callback functions given to conn.on() below, each of which keeps a
+  // reference to that connection (represented by 'conn'). That's why we can
+  // refer to 'conn' in these callback functions to get the correct connection.
+
+  conn.on('login', function(msg) {
+    if (msg && msg.user_id) {
+      // Message seems valid.
+      conn.user_id = msg.user_id;
+      conn.emit('login_ok');
+      // Broadcast that someone entered the room.
+      io.emit('notification', msg.user_id + ' entered the room.');
+      // Send a welcome message.
+      conn.emit('notification', "welcome to the chat room, " + conn.user_id + "!");
+    } else {
+      // When something is wrong, send a login_fail message to the client.
+      conn.emit('login_fail');
+    }
+  });
+
+  conn.on('chat', function(msg) {
+    if (msg && msg.content) {
+      // Broadcast this message to everyone in the room.
+      io.emit('chat', {
+        sender: conn.user_id,
+        content: msg.content,
+      });
+    }
+    // If the message seems invalid, it'll be ignored.
+  });
+
+  conn.on('disconnect', function() {
+    io.emit('notification', conn.user_id + ' left the room.');
+  });
+});
 
 // Listen on a high port.
-app.listen(10001);
-
-// Handles HTTP requests.
-function handler(request, response) {
-  // This will read the file 'index.html', and call the function (the 2nd
-  // argument) to process the content of the file.
-  // __dirname is a preset variable pointing to the folder of this file.
-  fs.readFile(
-    __dirname + '/index.html',
-    function(err, content) {
-      if (err) {
-        // If an error happened when loading 'index.html', return a 500 error.
-        response.writeHead(500);
-        return response.end('Error loading index.html!');
-      }
-      // If no error happened, return the content of 'index.html'
-      response.writeHead(200, {'Content-Type': 'text/html'});
-      response.end(content);
-    });
-}
-
-// Tells socket.io to listen to an event called 'connection'.
-// This is a built-in event that is triggered when a client connects to the
-// server. At that time, the function (the 2nd argument) will be called with an
-// object representing the client.
-io.sockets.on(
-  'connection',
-  function(client) {
-    // Send a welcome message first.
-    client.emit('welcome', 'Welcome to my chat room!');
-
-    // Listen to an event called 'login'. The client should emit this event when
-    // it wants to log in to the chat room.
-    client.on(
-      'login',
-      function(message) {
-        // This function extracts the user name from the login message, stores
-        // it to the client object, sends a login_ok message to the client, and
-        // sends notifications to other clients.
-        if (message && message.user_name) {
-          client.set('user_name', message.user_name);
-          client.emit('login_ok');
-          // client.broadcast.emits() will send to all clients except the
-          // current client. See socket.io FAQ for more examples.
-          client.broadcast.emit('notification',
-                                message.user_name + ' entered the room.');
-          return
-        }
-        // When something is wrong, send a login_failed message to the client.
-        client.emit('login_failed');
-      });
-
-    // Listen to an event called 'chat'. The client should emit this event when
-    // it sends a chat message.
-    client.on(
-      'chat',
-      function(message) {
-        // This function tries to get the user name from the client object, and
-        // use that to form a chat message that will be sent to all clients.
-        if (message && message.msg) {
-          client.get(
-            'user_name', 
-            function(err, name) {
-              if (!err) {
-                // io.sockets.emit() will send the message to all clients,
-                // including the current client. See socket.io FAQ for more
-                // examples.
-                io.sockets.emit('chat', { user_name: name, msg: message.msg });
-              }
-            });
-        }
-      });
-
-    // Print a message when somebody left.
-    client.on(
-      'disconnect',
-      function() {
-        client.get(
-          'user_name',
-          function(err, name) {
-            if (name) {
-              io.sockets.emit('notification', name + ' left the room.');
-            }
-          });
-      });
-  });
+var port = 12121;
+server.listen(port, function() {
+  console.log("Listening on port " + port);
+});
 
