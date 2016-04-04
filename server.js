@@ -32,7 +32,10 @@ io.sockets.on('connection', function(conn) {
   // refer to 'conn' in these callback functions to get the correct connection.
 
   conn.on('login', function(msg) {
-    if (msg && msg.user_id) {
+    if (msg && msg.user_id
+        && /^[^\/]+$/.test(msg.user_id)
+        && msg.user_id != '*'
+        && msg.user_id != 'system') {
       // Message seems valid.
       conn.user_id = msg.user_id;
 
@@ -68,14 +71,16 @@ io.sockets.on('connection', function(conn) {
   });
 
   conn.on('disconnect', function() {
-    var notif = {
-      ts: Date.now(),
-      sender: "system",
-      receiver: "*",
-      content: conn.user_id + " left the room.",
-    };
-    notif.id = digest(notif.receiver + notif.ts + notif.content);
-    io.emit('notification', notif);
+    if (conn.user_id) {
+      var notif = {
+        ts: Date.now(),
+        sender: "system",
+        receiver: "*",
+        content: conn.user_id + " left the room.",
+      };
+      notif.id = digest(notif.receiver + notif.ts + notif.content);
+      io.emit('notification', notif);
+    }
   });
 });
 
