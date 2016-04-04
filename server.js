@@ -35,10 +35,12 @@ io.sockets.on('connection', function(conn) {
     if (msg && msg.user_id) {
       // Message seems valid.
       conn.user_id = msg.user_id;
+
       conn.emit('login_ok');
       // Broadcast that someone entered the room.
       var notif = {
         ts: Date.now(),
+        sender: "system",
         receiver: "*",
         content: conn.user_id + " entered the room.",
       };
@@ -56,6 +58,7 @@ io.sockets.on('connection', function(conn) {
       var chat = {
         ts: Date.now(),
         sender: conn.user_id,
+        receiver: "*",
         content: msg.content,
       };
       chat.id = digest(chat.sender + chat.ts + chat.content);
@@ -67,6 +70,7 @@ io.sockets.on('connection', function(conn) {
   conn.on('disconnect', function() {
     var notif = {
       ts: Date.now(),
+      sender: "system",
       receiver: "*",
       content: conn.user_id + " left the room.",
     };
