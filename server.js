@@ -1,5 +1,13 @@
 // This node.js program implements a simple chat room service.
 
+// Database related.
+var MongoClient = require('mongodb').MongoClient;
+var dbUrl = 'mongodb://localhost:27017/chat';
+var db = null;
+
+var collections = require('./collections');
+var messages = collections.messages;
+
 // Create a web server using Express.
 var express = require('express');
 var app = express();
@@ -32,11 +40,29 @@ io.sockets.on('connection', function(conn) {
   // refer to 'conn' in these callback functions to get the correct connection.
 
   conn.on('login', function(msg) {
-    if (msg && msg.user_id) {
+    if (msg && msg.user_id
+        && /^[^\/]+$/.test(msg.user_id)
+        && msg.user_id != '*'
+        && msg.user_id != 'system') {
       // Message seems valid.
       conn.user_id = msg.user_id;
 
       conn.emit('login_ok');
+
+      // Retrieve chat history and send to this client.
+      messages.all(db, function(err, result) {
+        if (err) {
+          return console.error(err);
+        }
+        if (result) {
+          if (result.sender === 'system') {
+            conn.emit('notification', result);
+          } else {
+            conn.emit('chat', result);
+          }
+        }
+      });
+
       // Broadcast that someone entered the room.
       var notif = {
         ts: Date.now(),
@@ -44,8 +70,14 @@ io.sockets.on('connection', function(conn) {
         receiver: "*",
         content: conn.user_id + " entered the room.",
       };
-      notif.id = digest(notif.receiver + notif.ts + notif.content);
+      notif._id = digest(notif.receiver + notif.ts + notif.content);
       io.emit('notification', notif);
+      messages.insert(db, notif, function(err, result) {
+        if (err) {
+          return console.error(err);
+        }
+        console.log("message inserted: " + notif);
+      });
     } else {
       // When something is wrong, send a login_fail message to the client.
       conn.emit('login_fail');
@@ -61,27 +93,67 @@ io.sockets.on('connection', function(conn) {
         receiver: "*",
         content: msg.content,
       };
-      chat.id = digest(chat.sender + chat.ts + chat.content);
+      chat._id = digest(chat.sender + chat.ts + chat.content);
       io.emit('chat', chat);
+      messages.insert(db, chat, function(err, result) {
+        if (err) {
+          return console.error(err);
+        }
+        console.log("message inserted: " + chat);
+      });
     }
     // If the message seems invalid, it'll be ignored.
   });
 
   conn.on('disconnect', function() {
-    var notif = {
-      ts: Date.now(),
-      sender: "system",
-      receiver: "*",
-      content: conn.user_id + " left the room.",
-    };
-    notif.id = digest(notif.receiver + notif.ts + notif.content);
-    io.emit('notification', notif);
+    if (conn.user_id) {
+      var notif = {
+        ts: Date.now(),
+        sender: "system",
+        receiver: "*",
+        content: conn.user_id + " left the room.",
+      };
+      notif._id = digest(notif.receiver + notif.ts + notif.content);
+      io.emit('notification', notif);
+      messages.insert(db, notif, function(err, result) {
+        if (err) {
+          return console.error(err);
+        }
+        console.log("message inserted: " + notif);
+      });
+    }
   });
 });
 
-// Listen on a high port.
+// Path like /u/yin/messages
+app.use(/\/u\/([^\/]+)\/messages/, function(req, res) {
+  var userId = req.params[0];
+  var msgs = new Array();
+  messages.find(db, { sender: userId }, function(err, result) {
+    if (err) {
+      return console.error(err);
+    }
+    if (result) {
+      msgs.push(JSON.stringify(result));
+    } else {
+      res.type('text/plain').send(msgs.join('\n'));
+    }
+  });
+});
+
 var port = 12121;
-server.listen(port, function() {
-  console.log("Listening on port " + port);
+
+// Connect to database, before starting the web server.
+MongoClient.connect(dbUrl, function(err, result) {
+  if (err) {
+    return console.error("Cannot connect to database: " + url);
+  }
+
+  db = result;
+
+  // Start the web server on a high port.
+  server.listen(port, function() {
+    console.log("Listening on port " + port);
+  });
 });
 
