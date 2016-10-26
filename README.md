@@ -12,6 +12,6 @@ A chat service using node.js + express + socket.io.
 
 # Debugging the server
 1. Start server with ```node --debug server.js```
-2. In a different console npm install -g node-inspector
+2. In a different console ```npm install -g node-inspector```
 3. Run node inspector (i.e. ```node-inspector```).
 4. Goto [http://127.0.0.1:8080/?port=5858] to see the node server debugger.
